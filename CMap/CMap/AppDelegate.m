@@ -23,7 +23,7 @@
     // 要使用百度地图，请先启动BaiduMapManager
     _mapManager = [[BMKMapManager alloc]init];
     // 如果要关注网络及授权验证事件，请设定generalDelegate参数
-    BOOL ret = [_mapManager start:@"Tk7K6xD0IzmtqOdIKY6SxztIAiB0iWjC"  generalDelegate:nil];
+    BOOL ret = [_mapManager start:@"KHPr7iyEE6Dx8eAyO59qDG4Np4yanHpQ"  generalDelegate:nil];
     if (!ret) {
         NSLog(@"百度地图启动失败!");
     }
