@@ -13,10 +13,13 @@
 #import "ViewController.h"
 #import "BDheader.h"
 
-@interface ViewController () <BMKMapViewDelegate> {
+@interface ViewController () <BMKMapViewDelegate,BMKLocationServiceDelegate,CLLocationManagerDelegate> {
 
-    BMKMapView *_mapView;
-
+    BMKMapView *_mapView;       // 地图
+    BMKLocationService *_locService;    //定位服务
+    BMKPointAnnotation *_annotation;    //大头针
+    CLLocationCoordinate2D _coor;        // 显示范围
+    
 }
 
 @end
@@ -26,9 +29,20 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    // 初始化BMKLocationService定位功能
+    _locService = [[BMKLocationService alloc]init];
+    _locService.delegate = self;
+    // 启动LocationService
+    [_locService startUserLocationService];
     
     // 创建地图
     _mapView = [[BMKMapView alloc]initWithFrame:[UIScreen mainScreen].bounds];
+    
+    // 创建大头针
+    _annotation = [[BMKPointAnnotation alloc]init];
+    
+    // 显示范围
+    _mapView.showsUserLocation = YES;//显示定位图层
     
     // 切换为卫星图
     // [_mapView setMapType:BMKMapTypeSatellite];
@@ -36,13 +50,16 @@
     // 切换为普通视图
     [_mapView setMapType:BMKMapTypeStandard];
     
-    //打开实时路况图层
+    // 打开实时路况图层
     // [_mapView setTrafficEnabled:YES];
     
-    //打开百度城市热力图图层（百度自有数据）
+    // 打开百度城市热力图图层（百度自有数据）
     // [_mapView setBaiduHeatMapEnabled:YES];
     
     
+    
+    // 禁用旋转手势
+    // _mapView.rotateEnabled = NO;
     
     // 地图logo位置
     /*
@@ -63,10 +80,19 @@
     // 比例等级，同时支持设置MaxZoomLevel和minZoomLevel。
     
     
+    // 打开室内地图（默认关闭）
+    // _mapView.baseIndoorMapEnabled = YES;
+    
+    
     self.view = _mapView;
     
     
     
+    
+    
+    CLLocationManager *manager = [[CLLocationManager alloc] init];
+    manager.delegate = self;
+    [manager startUpdatingLocation];
     
 }
 
@@ -84,12 +110,13 @@
     _mapView.delegate = self; // 此处记得不用的时候需要置nil，否则影响内存的释放
     
     // 大头针
-    [self _addPointAnnotation];
+    // [self _addPointAnnotation];
     
     // 折线覆盖
     // [self _addLine];         // 线段
     // [self _addColorLine];    // 多色线
-    [self _cycleLine];          // 弧线
+    // [self _cycleLine];          // 弧线
+    // [self linesAndFill];        // 所变形覆盖物
     
     // 长按添加行不通
 //    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_addLine)];
@@ -186,10 +213,26 @@
 
 }
 
+// 多边形覆盖物
+- (void)linesAndFill {
+
+    // 添加多边形覆盖物
+    CLLocationCoordinate2D coords[3] = {0};
+    coords[0].latitude = 39;
+    coords[0].longitude = 116;
+    coords[1].latitude = 38;
+    coords[1].longitude = 115;
+    coords[2].latitude = 38;
+    coords[2].longitude = 117;
+    BMKPolygon *polygon = [BMKPolygon polygonWithCoordinates:coords count:3];
+    
+    [_mapView addOverlay:polygon];
+
+}
+
 #pragma mark - 协议方法
 // 大头针
-- (BMKAnnotationView *)mapView:(BMKMapView *)mapView viewForAnnotation:(id <BMKAnnotation>)annotation
-{
+- (BMKAnnotationView *)mapView:(BMKMapView *)mapView viewForAnnotation:(id <BMKAnnotation>)annotation{
     if ([annotation isKindOfClass:[BMKPointAnnotation class]]) {
         BMKPinAnnotationView *newAnnotationView = [[BMKPinAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:@"myAnnotation"];
         // 大头针颜色
@@ -245,21 +288,99 @@
 //    return nil;
     
     // 弧线
-    if ([overlay isKindOfClass:[BMKArcline class]])
-    {
-        BMKArclineView *arclineView = [[BMKArclineView alloc] initWithOverlay:overlay];
-        arclineView.strokeColor = [[UIColor blueColor] colorWithAlphaComponent:0.5];
-        arclineView.lineWidth = 5.0;
+//    if ([overlay isKindOfClass:[BMKArcline class]])
+//    {
+//        BMKArclineView *arclineView = [[BMKArclineView alloc] initWithOverlay:overlay];
+//        arclineView.strokeColor = [[UIColor blueColor] colorWithAlphaComponent:0.5];
+//        arclineView.lineWidth = 5.0;
+//        
+//        return arclineView;
+//    }
+//    return nil;
+
+    // 多边形覆盖物
+    if ([overlay isKindOfClass:[BMKPolygon class]]){
+        BMKPolygonView* polygonView = [[BMKPolygonView alloc] initWithOverlay:overlay];
+        polygonView.strokeColor = [[UIColor purpleColor] colorWithAlphaComponent:1];
+        polygonView.fillColor = [[UIColor cyanColor] colorWithAlphaComponent:0.2];
+        polygonView.lineWidth = 5.0;
         
-        return arclineView;
+        return polygonView;
     }
     return nil;
+    
+    
+}
+
+// 通过实现delegate方法，来监听进入和移出室内图事件：
+-(void)mapview:(BMKMapView *)mapView baseIndoorMapWithIn:(BOOL)flag   baseIndoorMapInfo:(BMKBaseIndoorMapInfo *)info{
+    if (flag) {//进入室内图
+        NSLog(@"进入室内地图");
+    } else {//移出室内图
+        NSLog(@"移出室内地图");
+    }
+}
+
+// 处理方向变更信息
+- (void)didUpdateUserHeading:(BMKUserLocation *)userLocation{
+    
+    // NSLog(@"方向 is %@",userLocation.heading);
+    
+
+}
+
+// 处理位置坐标更新
+- (void)didUpdateBMKUserLocation:(BMKUserLocation *)userLocation{
+    NSLog(@"地理位置更新了 lat %f,long %f",userLocation.location.coordinate.latitude,userLocation.location.coordinate.longitude);
+    
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        _coor.latitude = userLocation.location.coordinate.latitude;
+        _coor.longitude = userLocation.location.coordinate.longitude;
+//        _annotation.coordinate = _coor;
+//        _annotation.title = @"我在这";
+//        [_mapView addAnnotation:_annotation];
+        
+        
+        // 将地图视觉移动到当前位置，并设定视图缩放大小
+        BMKCoordinateSpan span = BMKCoordinateSpanMake(0.002, 0.002);
+        _mapView.region = BMKCoordinateRegionMake(_coor, span);////限制地图显示范围
+        _mapView.userTrackingMode = BMKUserTrackingModeFollow;
+    });
+    
+    
+    [_mapView updateLocationData:userLocation];
+    
+    
+    
+//    NSString *lat = [NSString stringWithFormat:@"%f", userLocation.location.coordinate.latitude];
+//    NSString *lon = [NSString stringWithFormat:@"%f", userLocation.location.coordinate.longitude];
+    
+    
     
     
     
 }
 
+// 将经纬度反编译成城市
+- (void)locationManager:(CLLocationManager *)manager
+    didUpdateToLocation:(CLLocation *)newLocation
+           fromLocation:(CLLocation *)oldLocation __OSX_AVAILABLE_BUT_DEPRECATED(__MAC_10_6, __MAC_NA, __IPHONE_2_0, __IPHONE_6_0) __TVOS_PROHIBITED __WATCHOS_PROHIBITED {
 
+    CLGeocoder *geocoder = [[CLGeocoder alloc] init];
+    [geocoder  reverseGeocodeLocation:newLocation
+                    completionHandler:^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
+                        if (placemarks.count > 0) {
+                            for (CLPlacemark *place in placemarks) {
+                                
+                                // 当前城市名
+                                NSString *cityName = place.locality;
+                                NSLog(@"%@",cityName);
+                            }
+                        }
+                    }];
+
+}
 
 
 
